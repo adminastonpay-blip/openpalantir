@@ -44,4 +44,4 @@ To enable v2 for a test/staging environment only, configure `ENABLE_API_V2=true`
 
 The current flag is environment-wide. Tenant-level flags must wait until the gateway has a trusted tenant identity; an unverified client-supplied `X-Tenant` header is not an authorization boundary.
 
-See [API compatibility and rollout rules](docs/api-versioning.md).
+The rollout rules above are the compatibility contract for this initial version.
