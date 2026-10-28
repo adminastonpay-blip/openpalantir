@@ -36,7 +36,7 @@ def test_ontology_v2_returns_configured_schema_only(monkeypatch, tmp_path):
     schema = tmp_path / "schema.json"
     schema.write_text(json.dumps({
         "schemaVersion": "2.0.0",
-        "objectTypes": [{"id": "Customer", "properties": [{"name": "external_id", "type": "string"}]}],
+        "objectTypes": [{"id": "Customer", "properties": [{"name": "external_id", "type": "string"}]}, {"id": "Order"}],
         "linkTypes": [{"id": "PLACED", "source": "Customer", "target": "Order"}],
         "provenancePolicy": {"required": True, "fields": ["source", "createdAt", "createdBy", "transformations"]}
     }), encoding="utf-8")
