@@ -37,6 +37,10 @@ async function secureEqual(left, right) {
   for (let i = 0; i < aa.length; i++) diff |= aa[i] ^ bb[i];
   return diff === 0;
 }
+function requestedApiVersion(request) {
+  const accept = request.headers.get("Accept") || "";
+  return accept.split(",").some((value) => value.trim().split(";")[0] === "application/vnd.openpalantir.v2+json") ? 2 : 1;
+}
 function upstreamBase(value) {
   if (!value) return null;
   try {
@@ -62,6 +66,10 @@ export default {
     if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
       return json({ error: "method_not_allowed" }, 405, { allow: "GET, POST, PUT, PATCH, DELETE", ...corsHeaders });
     }
+    const apiVersion = requestedApiVersion(request);
+    if (apiVersion === 2 && env.ENABLE_API_V2 !== "true") {
+      return json({ error: "api_version_not_enabled" }, 404, { vary: "Accept", ...corsHeaders });
+    }
     if (!env.API_ACCESS_TOKEN) return json({ error: "service_not_configured" }, 503, corsHeaders);
     const authorization = request.headers.get("Authorization") || "";
     const supplied = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
@@ -75,7 +83,7 @@ export default {
     const base = upstreamBase(env.ONTOLOGY_API_URL);
     if (!base || !env.UPSTREAM_API_TOKEN) return json({ error: "upstream_not_configured" }, 503, corsHeaders);
     const relativePath = url.pathname.slice("/api/ontology/".length);
-    const target = new URL("/v1/" + relativePath, base);
+    const target = new URL("/v" + apiVersion + "/" + relativePath, base);
     target.search = url.search;
     const headers = new Headers();
     const contentType = request.headers.get("Content-Type");
@@ -90,7 +98,7 @@ export default {
       if (upstream.status >= 300 && upstream.status < 400) return json({ error: "upstream_redirect_blocked" }, 502, corsHeaders);
       const responseHeaders = new Headers({
         "cache-control": "no-store", "x-content-type-options": "nosniff",
-        "referrer-policy": "no-referrer", "x-frame-options": "DENY",
+        "referrer-policy": "no-referrer", "x-frame-options": "DENY", "vary": "Accept",
       });
       const type = upstream.headers.get("Content-Type");
       if (type) responseHeaders.set("Content-Type", type);
