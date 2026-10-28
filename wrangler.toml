@@ -1,14 +1,24 @@
-# Cloudflare Worker configuration. Keep secrets out of this file.
+# Wrangler is the source of truth for the Worker deployment.
+# Keep credentials in Cloudflare secrets, never in this file.
 name = "openpalantir"
-main = "workers/index.js"
+main = "./workers/index.js"
 compatibility_date = "2026-10-28"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
+upload_source_maps = true
 
 [vars]
-# Configure per environment in Cloudflare; never commit credentials.
+# Configure these values for the intended environment in Cloudflare.
 # ONTOLOGY_API_URL = "https://ontology-api.example.com"
 # CORS_ALLOWED_ORIGINS = "https://your-app.example.com"
 
 [observability]
 enabled = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.01
