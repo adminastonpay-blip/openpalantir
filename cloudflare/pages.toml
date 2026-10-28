@@ -1,0 +1,9 @@
+# Cloudflare Pages configuration (optional reference)
+# Deploy the frontend folder with:
+#   npx wrangler pages deploy frontend --project-name=openpalantir
+
+# Or connect the Git repository in the Cloudflare dashboard:
+# Framework preset: None (static)
+# Build command: (leave empty for pure static)
+# Build output directory: frontend
+# Root directory: /
