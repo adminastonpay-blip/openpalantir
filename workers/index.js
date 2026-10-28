@@ -5,7 +5,6 @@ const SECURITY_HEADERS = {
   "referrer-policy": "no-referrer",
   "x-frame-options": "DENY",
 };
-const MAX_BODY_BYTES = 1_000_000;
 const UPSTREAM_TIMEOUT_MS = 10_000;
 
 function json(data, status = 200, headers = {}) {
@@ -68,9 +67,10 @@ export default {
     if (!(await secureEqual(supplied, env.API_ACCESS_TOKEN))) {
       return json({ error: "unauthorized" }, 401, { "www-authenticate": "Bearer", ...corsHeaders });
     }
-    const declaredLength = Number(request.headers.get("Content-Length") || "0");
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
-      return json({ error: "payload_too_large" }, 413, corsHeaders);
+    // The currently implemented ontology API is read-only. Do not expose write verbs
+    // through the gateway until a separately reviewed authorization model exists.
+    if (request.method !== "GET") {
+      return json({ error: "read_only_endpoint" }, 405, { allow: "GET, OPTIONS", ...corsHeaders });
     }
     const base = upstreamBase(env.ONTOLOGY_API_URL);
     if (!base || !env.UPSTREAM_API_TOKEN) return json({ error: "upstream_not_configured" }, 503, corsHeaders);
@@ -84,7 +84,6 @@ export default {
     const requestId = request.headers.get("X-Request-ID");
     if (requestId && /^[A-Za-z0-9._:-]{1,128}$/.test(requestId)) headers.set("X-Request-ID", requestId);
     const init = { method: request.method, headers, redirect: "manual", signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) };
-    if (!["GET", "HEAD"].includes(request.method)) init.body = request.body;
     try {
       const upstream = await fetch(target, init);
       if (upstream.status >= 300 && upstream.status < 400) return json({ error: "upstream_redirect_blocked" }, 502, corsHeaders);
