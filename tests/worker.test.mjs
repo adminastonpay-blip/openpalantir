@@ -209,7 +209,9 @@ test("Phase 3 rejects expired or tampered tenant identity", async () => {
     assert.deepEqual(await response.json(), { error: "tenant_identity_invalid" });
 
     const valid = signedTenantToken();
-    const tampered = valid.slice(0, -1) + (valid.endsWith("a") ? "b" : "a");
+    const parts = valid.split(".");
+    parts[2] = (parts[2][0] === "A" ? "B" : "A") + parts[2].slice(1);
+    const tampered = parts.join(".");
     const tamperedResponse = await worker.fetch(req("/api/ontology/objects", {
       headers: { ...authHeaders, "X-Aston-Identity": tampered }
     }), tenantEnv);
