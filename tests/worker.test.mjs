@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import worker from "../workers/index.js";
 
 const req = (path, init = {}) => new Request("https://edge.example.test" + path, init);
@@ -143,4 +144,119 @@ test("body exactly at the configured limit is accepted", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+
+const tenantEnv = {
+  ...authorizedEnv,
+  ENABLE_TENANT_AUTH: "true",
+  TENANT_IDENTITY_SECRET: "tenant-identity-secret-longer-than-32-chars",
+  TENANT_IDENTITY_ISSUER: "https://auth.example.test",
+  TENANT_IDENTITY_AUDIENCE: "openpalantir-api"
+};
+
+function signedTenantToken(overrides = {}) {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const header = encode({ alg: "HS256", typ: "JWT" });
+  const now = Math.floor(Date.now() / 1000);
+  const claims = {
+    iss: "https://auth.example.test",
+    aud: "openpalantir-api",
+    sub: "operator-123",
+    tenant_id: "tenant-alpha",
+    permissions: ["ontology:read"],
+    iat: now,
+    exp: now + 300,
+    ...overrides
+  };
+  const payload = encode(claims);
+  const signingInput = header + "." + payload;
+  const signature = createHmac("sha256", tenantEnv.TENANT_IDENTITY_SECRET)
+    .update(signingInput).digest("base64url");
+  return signingInput + "." + signature;
+}
+
+test("Phase 3 tenant gate fails closed when identity token is missing", async () => {
+  const originalFetch = globalThis.fetch;
+  let upstreamCalled = false;
+  globalThis.fetch = async () => {
+    upstreamCalled = true;
+    return new Response("{}", { status: 200 });
+  };
+  try {
+    const response = await worker.fetch(req("/api/ontology/objects", { headers: authHeaders }), tenantEnv);
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { error: "tenant_identity_required" });
+    assert.equal(upstreamCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 3 rejects expired or tampered tenant identity", async () => {
+  const originalFetch = globalThis.fetch;
+  let upstreamCalled = false;
+  globalThis.fetch = async () => {
+    upstreamCalled = true;
+    return new Response("{}", { status: 200 });
+  };
+  try {
+    const expired = signedTenantToken({ exp: Math.floor(Date.now() / 1000) - 10 });
+    const response = await worker.fetch(req("/api/ontology/objects", {
+      headers: { ...authHeaders, "X-Aston-Identity": expired }
+    }), tenantEnv);
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { error: "tenant_identity_invalid" });
+
+    const valid = signedTenantToken();
+    const tampered = valid.slice(0, -1) + (valid.endsWith("a") ? "b" : "a");
+    const tamperedResponse = await worker.fetch(req("/api/ontology/objects", {
+      headers: { ...authHeaders, "X-Aston-Identity": tampered }
+    }), tenantEnv);
+    assert.equal(tamperedResponse.status, 401);
+    assert.equal(upstreamCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 3 forwards only the signed tenant claim, not a spoofed tenant header", async () => {
+  const originalFetch = globalThis.fetch;
+  let upstreamTenant = null;
+  let upstreamUrl = "";
+  globalThis.fetch = async (url, init) => {
+    upstreamUrl = String(url);
+    upstreamTenant = new Headers(init.headers).get("X-Aston-Tenant");
+    return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await worker.fetch(req("/api/ontology/objects", {
+      headers: {
+        ...authHeaders,
+        "X-Aston-Identity": signedTenantToken({ tenant_id: "tenant-beta" }),
+        "X-Aston-Tenant": "victim-tenant"
+      }
+    }), tenantEnv);
+    assert.equal(response.status, 200);
+    assert.equal(upstreamUrl, "https://ontology.example.test/v1/objects");
+    assert.equal(upstreamTenant, "tenant-beta");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Phase 3 denies a valid identity without read permission", async () => {
+  const response = await worker.fetch(req("/api/ontology/objects", {
+    headers: { ...authHeaders, "X-Aston-Identity": signedTenantToken({ permissions: ["ontology:write"] }) }
+  }), tenantEnv);
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "tenant_permission_denied" });
+});
+
+test("Phase 3 tenant gate fails closed when identity configuration is incomplete", async () => {
+  const response = await worker.fetch(req("/api/ontology/objects", {
+    headers: { ...authHeaders, "X-Aston-Identity": signedTenantToken() }
+  }), { ...tenantEnv, TENANT_IDENTITY_SECRET: undefined });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "tenant_identity_not_configured" });
 });
