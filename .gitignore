@@ -1,0 +1,62 @@
+# Environment
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Node / Frontend
+node_modules/
+.next/
+out/
+.nuxt/
+.dist/
+*.tsbuildinfo
+.npm
+.yarn/
+
+# Docker / local data
+postgres_data/
+minio_data/
+valkey_data/
+prometheus_data/
+grafana_data/
+ontology_data/
+*.log
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Cloudflare
+.wrangler/
+.dev.vars
+.cf-pages/
+
+# Secrets & keys
+secrets/
+*.key
+credentials.json
+
+# Temporary
+tmp/
+temp/
+.cache/
