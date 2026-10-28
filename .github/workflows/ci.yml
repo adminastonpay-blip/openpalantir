@@ -50,3 +50,16 @@ jobs:
       - name: Test ontology API
         working-directory: ontology
         run: python -m pytest -q
+
+  opa:
+    name: Validate authorization policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Open Policy Agent
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
+      - name: Test deny-by-default and tenant isolation
+        run: opa test configs/opa -v
