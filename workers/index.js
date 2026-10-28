@@ -37,6 +37,33 @@ async function secureEqual(left, right) {
   for (let i = 0; i < aa.length; i++) diff |= aa[i] ^ bb[i];
   return diff === 0;
 }
+async function readLimitedBody(request, limit) {
+  if (!request.body) return { body: undefined, tooLarge: false };
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel("payload_too_large").catch(() => {});
+        return { body: undefined, tooLarge: true };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return { body: undefined, tooLarge: false, readError: true };
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { body, tooLarge: false };
+}
 function upstreamBase(value) {
   if (!value) return null;
   try {
@@ -72,6 +99,11 @@ export default {
     if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
       return json({ error: "payload_too_large" }, 413, corsHeaders);
     }
+    // The currently implemented ontology API is read-only. Do not expose write verbs
+    // through the gateway until a separately reviewed authorization model exists.
+    if (request.method !== "GET") {
+      return json({ error: "read_only_endpoint" }, 405, { allow: "GET, OPTIONS", ...corsHeaders });
+    }
     const base = upstreamBase(env.ONTOLOGY_API_URL);
     if (!base || !env.UPSTREAM_API_TOKEN) return json({ error: "upstream_not_configured" }, 503, corsHeaders);
     const relativePath = url.pathname.slice("/api/ontology/".length);
@@ -84,7 +116,6 @@ export default {
     const requestId = request.headers.get("X-Request-ID");
     if (requestId && /^[A-Za-z0-9._:-]{1,128}$/.test(requestId)) headers.set("X-Request-ID", requestId);
     const init = { method: request.method, headers, redirect: "manual", signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) };
-    if (!["GET", "HEAD"].includes(request.method)) init.body = request.body;
     try {
       const upstream = await fetch(target, init);
       if (upstream.status >= 300 && upstream.status < 400) return json({ error: "upstream_redirect_blocked" }, 502, corsHeaders);
