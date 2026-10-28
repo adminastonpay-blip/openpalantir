@@ -9,6 +9,7 @@ upload_source_maps = true
 
 [vars]
 # Configure these values for the intended environment in Cloudflare.
+# ENABLE_API_V2 = "false"  # opt in only after the upstream /v2 API is ready; default is disabled.
 # ONTOLOGY_API_URL = "https://ontology-api.example.com"
 # CORS_ALLOWED_ORIGINS = "https://your-app.example.com"
 
