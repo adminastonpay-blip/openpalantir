@@ -26,3 +26,22 @@ See [Cloudflare deployment runbook](docs/cloudflare-deploy.md) and [Security Pol
 ## Limitations
 
 This is a foundation, not a complete enterprise platform. It does not yet provide production identity-provider integration, database migrations, data connectors, event lineage, policy decision-point integration, or a production deployment pipeline. The health endpoint does not prove that business data is connected.
+
+
+## API versioning and feature flags
+
+The existing `/api/ontology/*` route remains v1 by default. Existing clients that do not request a version continue to be routed to the upstream `/v1/*` API.
+
+An opt-in v2 request uses:
+
+```http
+Accept: application/vnd.openpalantir.v2+json
+```
+
+V2 is disabled unless the Worker environment explicitly sets `ENABLE_API_V2=true`. When disabled, a v2 request returns `404 api_version_not_enabled`; it does not fall back to v1. This prevents a client from unknowingly receiving a different schema.
+
+To enable v2 for a test/staging environment only, configure `ENABLE_API_V2=true` there after the upstream API has implemented and tested `/v2/*`. Do not enable it in production until compatibility tests and an explicit rollout decision are complete. Credentials must be stored as Cloudflare secrets, not in this file.
+
+The current flag is environment-wide. Tenant-level flags must wait until the gateway has a trusted tenant identity; an unverified client-supplied `X-Tenant` header is not an authorization boundary.
+
+See [API compatibility and rollout rules](docs/api-versioning.md).
