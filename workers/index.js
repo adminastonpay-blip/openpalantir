@@ -49,6 +49,52 @@ function upstreamBase(value) {
     return url;
   } catch { return null; }
 }
+
+// Validate the declared size when present, then enforce the limit against bytes
+// actually received. Content-Length is advisory and may be absent on streamed requests.
+async function readBoundedBody(request) {
+  const declaredLength = request.headers.get("Content-Length");
+  if (declaredLength !== null) {
+    const normalizedLength = declaredLength.trim();
+    if (!/^\d+$/.test(normalizedLength)) {
+      return { error: "invalid_content_length", status: 400 };
+    }
+    const size = Number(normalizedLength);
+    if (!Number.isSafeInteger(size) || size > MAX_BODY_BYTES) {
+      return { error: "payload_too_large", status: 413 };
+    }
+  }
+
+  if (!request.body) return { body: null };
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        try { await reader.cancel(); } catch {}
+        return { error: "payload_too_large", status: 413 };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return { error: "invalid_request_body", status: 400 };
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { body };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -76,10 +122,14 @@ export default {
     if (!(await secureEqual(supplied, env.API_ACCESS_TOKEN))) {
       return json({ error: "unauthorized" }, 401, { "www-authenticate": "Bearer", ...corsHeaders });
     }
-    const declaredLength = Number(request.headers.get("Content-Length") || "0");
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
-      return json({ error: "payload_too_large" }, 413, corsHeaders);
+
+    let body = null;
+    if (!["GET", "HEAD"].includes(request.method)) {
+      const bounded = await readBoundedBody(request);
+      if (bounded.error) return json({ error: bounded.error }, bounded.status, corsHeaders);
+      body = bounded.body;
     }
+
     const base = upstreamBase(env.ONTOLOGY_API_URL);
     if (!base || !env.UPSTREAM_API_TOKEN) return json({ error: "upstream_not_configured" }, 503, corsHeaders);
     const relativePath = url.pathname.slice("/api/ontology/".length);
@@ -92,7 +142,7 @@ export default {
     const requestId = request.headers.get("X-Request-ID");
     if (requestId && /^[A-Za-z0-9._:-]{1,128}$/.test(requestId)) headers.set("X-Request-ID", requestId);
     const init = { method: request.method, headers, redirect: "manual", signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) };
-    if (!["GET", "HEAD"].includes(request.method)) init.body = request.body;
+    if (!["GET", "HEAD"].includes(request.method) && body !== null) init.body = body;
     try {
       const upstream = await fetch(target, init);
       if (upstream.status >= 300 && upstream.status < 400) return json({ error: "upstream_redirect_blocked" }, 502, corsHeaders);
