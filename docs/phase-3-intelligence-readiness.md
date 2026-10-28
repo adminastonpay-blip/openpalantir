@@ -2,7 +2,7 @@
 
 ## Status
 
-Planning and safety contract only. This document does not enable API v2, change production configuration, or deploy the Worker.
+Implementation in progress on an isolated branch. The first increment adds an opt-in signed tenant-identity gate and regression tests. It does not enable the gate in production, enable API v2, or deploy the Worker.
 
 ## Why this phase is gated
 
@@ -45,3 +45,23 @@ Add read-only operational intelligence over explicitly configured, real source d
 - No activation of `ENABLE_API_V2` or `ENABLE_ONTOLOGY_V2`.
 - No production deployment from CI.
 - No claim of production readiness or Palantir feature parity.
+
+
+## Implemented in this branch
+
+- Added `workers/tenant-identity.js` to validate HS256-signed identity tokens.
+- Identity claims require configured issuer and audience, an unexpired `exp`, valid optional `nbf`, a bounded subject and tenant identifier, and the `ontology:read` permission.
+- The gateway applies the identity gate only when `ENABLE_TENANT_AUTH=true`; missing or incomplete identity configuration fails closed.
+- When the gate is enabled, the gateway derives `X-Aston-Tenant` exclusively from the verified signed claim. A client-supplied tenant header is not forwarded as authorization.
+- Added tests for missing identity, expired/tampered tokens, insufficient permission, incomplete configuration, and tenant-header spoofing.
+- The feature remains opt-in. Existing behavior remains unchanged while `ENABLE_TENANT_AUTH` is unset or not `true`.
+
+## Required configuration before any non-production enablement
+
+Set these Worker variables/secrets only after the trusted identity issuer is implemented and configured:
+- `ENABLE_TENANT_AUTH=true` (enable only in a non-production environment first)
+- `TENANT_IDENTITY_SECRET` (secret, at least 32 characters; never commit it)
+- `TENANT_IDENTITY_ISSUER` (exact trusted issuer)
+- `TENANT_IDENTITY_AUDIENCE` (exact API audience)
+
+The token must be issued by a trusted authentication service. Do not create identity tokens in the browser or let a caller choose its own tenant claim. This shared-HMAC contract is a first integration step, not a replacement for an identity provider, key rotation, or a full authorization review.
