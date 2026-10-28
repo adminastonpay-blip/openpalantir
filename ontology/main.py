@@ -76,12 +76,43 @@ async def get_ontology_v2() -> dict[str, Any]:
     for key in ("objectTypes", "linkTypes"):
         if not isinstance(payload.get(key), list):
             raise HTTPException(status_code=503, detail=f"Ontology v2 {key} must be a list")
-    for item in payload["objectTypes"] + payload["linkTypes"]:
+    object_types = payload["objectTypes"]
+    link_types = payload["linkTypes"]
+    all_types = object_types + link_types
+    type_ids: list[str] = []
+    for item in all_types:
         if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"].strip():
             raise HTTPException(status_code=503, detail="Ontology v2 schema contains an invalid type")
+        type_ids.append(item["id"])
+        properties = item.get("properties", [])
+        if not isinstance(properties, list):
+            raise HTTPException(status_code=503, detail="Ontology v2 type properties must be a list")
+        property_names: list[str] = []
+        for prop in properties:
+            if not isinstance(prop, dict) or not isinstance(prop.get("name"), str) or not prop["name"].strip():
+                raise HTTPException(status_code=503, detail="Ontology v2 schema contains an invalid property")
+            property_names.append(prop["name"])
+        if len(property_names) != len(set(property_names)):
+            raise HTTPException(status_code=503, detail="Ontology v2 schema contains duplicate property names")
+    if len(type_ids) != len(set(type_ids)):
+        raise HTTPException(status_code=503, detail="Ontology v2 schema contains duplicate type IDs")
+    object_type_ids = {item["id"] for item in object_types}
+    for link in link_types:
+        if not isinstance(link.get("source"), str) or link["source"] not in object_type_ids:
+            raise HTTPException(status_code=503, detail="Ontology v2 link source must reference an object type")
+        if not isinstance(link.get("target"), str) or link["target"] not in object_type_ids:
+            raise HTTPException(status_code=503, detail="Ontology v2 link target must reference an object type")
     provenance = payload.get("provenancePolicy", {})
-    if not isinstance(provenance, dict) or provenance.get("required") is not True:
-        raise HTTPException(status_code=503, detail="Ontology v2 provenance policy must be required")
+    if (
+        not isinstance(provenance, dict)
+        or provenance.get("required") is not True
+        or not isinstance(provenance.get("fields"), list)
+        or not provenance["fields"]
+        or any(not isinstance(field, str) or not field.strip() for field in provenance["fields"])
+    ):
+        raise HTTPException(status_code=503, detail="Ontology v2 provenance policy must require named fields")
+    if len(provenance["fields"]) != len(set(provenance["fields"])):
+        raise HTTPException(status_code=503, detail="Ontology v2 provenance fields must be unique")
     return {
         "schemaVersion": payload["schemaVersion"],
         "objectTypes": payload["objectTypes"],

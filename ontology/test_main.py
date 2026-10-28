@@ -36,7 +36,7 @@ def test_ontology_v2_returns_configured_schema_only(monkeypatch, tmp_path):
     schema = tmp_path / "schema.json"
     schema.write_text(json.dumps({
         "schemaVersion": "2.0.0",
-        "objectTypes": [{"id": "Customer", "properties": [{"name": "external_id", "type": "string"}]}],
+        "objectTypes": [{"id": "Customer", "properties": [{"name": "external_id", "type": "string"}]}, {"id": "Order"}],
         "linkTypes": [{"id": "PLACED", "source": "Customer", "target": "Order"}],
         "provenancePolicy": {"required": True, "fields": ["source", "createdAt", "createdBy", "transformations"]}
     }), encoding="utf-8")
@@ -58,6 +58,50 @@ def test_ontology_v2_fails_closed_for_invalid_schema(monkeypatch, tmp_path):
     schema = tmp_path / "schema.json"
     schema.write_text(json.dumps({"schemaVersion": "2.0.0", "objectTypes": [], "linkTypes": [],
                                   "provenancePolicy": {"required": False}}), encoding="utf-8")
+    monkeypatch.setenv("ONTOLOGY_API_KEY", "test-secret")
+    monkeypatch.setenv("ENABLE_ONTOLOGY_V2", "true")
+    monkeypatch.setenv("ONTOLOGY_SCHEMA_V2_PATH", str(schema))
+    response = client.get("/v2/ontology", headers={"Authorization": "Bearer test-secret"})
+    assert response.status_code == 503
+
+def test_ontology_v2_rejects_dangling_link(monkeypatch, tmp_path):
+    schema = tmp_path / "schema.json"
+    schema.write_text(json.dumps({
+        "schemaVersion": "2.0.0",
+        "objectTypes": [{"id": "Customer"}, {"id": "Order"}],
+        "linkTypes": [{"id": "PLACED", "source": "Customer", "target": "Missing"}],
+        "provenancePolicy": {"required": True, "fields": ["source"]}
+    }), encoding="utf-8")
+    monkeypatch.setenv("ONTOLOGY_API_KEY", "test-secret")
+    monkeypatch.setenv("ENABLE_ONTOLOGY_V2", "true")
+    monkeypatch.setenv("ONTOLOGY_SCHEMA_V2_PATH", str(schema))
+    response = client.get("/v2/ontology", headers={"Authorization": "Bearer test-secret"})
+    assert response.status_code == 503
+
+
+def test_ontology_v2_rejects_duplicate_type_ids(monkeypatch, tmp_path):
+    schema = tmp_path / "schema.json"
+    schema.write_text(json.dumps({
+        "schemaVersion": "2.0.0",
+        "objectTypes": [{"id": "Customer"}, {"id": "Customer"}],
+        "linkTypes": [],
+        "provenancePolicy": {"required": True, "fields": ["source"]}
+    }), encoding="utf-8")
+    monkeypatch.setenv("ONTOLOGY_API_KEY", "test-secret")
+    monkeypatch.setenv("ENABLE_ONTOLOGY_V2", "true")
+    monkeypatch.setenv("ONTOLOGY_SCHEMA_V2_PATH", str(schema))
+    response = client.get("/v2/ontology", headers={"Authorization": "Bearer test-secret"})
+    assert response.status_code == 503
+
+
+def test_ontology_v2_rejects_invalid_provenance_fields(monkeypatch, tmp_path):
+    schema = tmp_path / "schema.json"
+    schema.write_text(json.dumps({
+        "schemaVersion": "2.0.0",
+        "objectTypes": [{"id": "Customer"}],
+        "linkTypes": [],
+        "provenancePolicy": {"required": True, "fields": []}
+    }), encoding="utf-8")
     monkeypatch.setenv("ONTOLOGY_API_KEY", "test-secret")
     monkeypatch.setenv("ENABLE_ONTOLOGY_V2", "true")
     monkeypatch.setenv("ONTOLOGY_SCHEMA_V2_PATH", str(schema))
