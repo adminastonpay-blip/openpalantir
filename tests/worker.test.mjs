@@ -26,3 +26,36 @@ test("preflight rejects unconfigured origins", async () => {
   }), { CORS_ALLOWED_ORIGINS: "https://app.example" });
   assert.equal(response.status, 403);
 });
+
+test("ontology gateway rejects write methods before contacting upstream", async () => {
+  const previousFetch = globalThis.fetch;
+  let upstreamCalled = false;
+  globalThis.fetch = async () => { upstreamCalled = true; throw new Error("must not call upstream"); };
+  try {
+    const response = await worker.fetch(req("/api/ontology/objects", {
+      method: "POST",
+      headers: { Authorization: "Bearer expected", "Content-Type": "application/json" },
+      body: JSON.stringify({ objects: [{ type: "Injected" }] })
+    }), {
+      API_ACCESS_TOKEN: "expected",
+      ONTOLOGY_API_URL: "https://ontology.example.test",
+      UPSTREAM_API_TOKEN: "upstream-secret"
+    });
+    assert.equal(response.status, 405);
+    assert.equal((await response.json()).error, "read_only_endpoint");
+    assert.equal(response.headers.get("allow"), "GET, OPTIONS");
+    assert.equal(upstreamCalled, false);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("ontology gateway rejects all write verbs", async () => {
+  for (const method of ["PUT", "PATCH", "DELETE"]) {
+    const response = await worker.fetch(req("/api/ontology/objects", {
+      method,
+      headers: { Authorization: "Bearer expected" }
+    }), { API_ACCESS_TOKEN: "expected" });
+    assert.equal(response.status, 405, method);
+  }
+});
