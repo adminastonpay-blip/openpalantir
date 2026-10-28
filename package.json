@@ -1,0 +1,26 @@
+{
+  "name": "openpalantir",
+  "version": "0.1.0",
+  "description": "Open-source Palantir-like platform — Ontology + Lakehouse + Intelligence. Cloudflare-ready.",
+  "private": true,
+  "scripts": {
+    "dev:worker": "wrangler dev",
+    "deploy:worker": "wrangler deploy",
+    "deploy:pages": "wrangler pages deploy frontend --project-name=openpalantir",
+    "deploy": "npm run deploy:worker && npm run deploy:pages",
+    "cf-typegen": "wrangler types"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  },
+  "keywords": [
+    "palantir",
+    "ontology",
+    "lakehouse",
+    "open-source",
+    "cloudflare",
+    "foundry",
+    "gotham"
+  ],
+  "license": "Apache-2.0"
+}

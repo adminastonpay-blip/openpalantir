@@ -1,0 +1,40 @@
+# Cloudflare Workers / Pages configuration for OpenPalantir
+# https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "openpalantir"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Main worker (API gateway / edge proxy)
+main = "workers/index.js"
+
+# Account & routes (fill with your Cloudflare account)
+# account_id = "your-account-id"
+# workers_dev = true
+
+[vars]
+ENVIRONMENT = "production"
+ONTOLOGY_API_URL = "https://your-backend.example.com"  # Replace with your backend URL
+
+# KV for caching ontology metadata
+# [[kv_namespaces]]
+# binding = "ONTOLOGY_CACHE"
+# id = "your-kv-id"
+
+# R2 for lakehouse-style storage (alternative to MinIO)
+# [[r2_buckets]]
+# binding = "LAKEHOUSE"
+# bucket_name = "openpalantir-lakehouse"
+
+# Durable Objects (for real-time features later)
+# [[durable_objects.bindings]]
+# name = "SESSION"
+# class_name = "SessionDO"
+
+# Pages project (if deploying frontend separately)
+# [site]
+# bucket = "./frontend/dist"
+
+# Observability
+[observability]
+enabled = true
