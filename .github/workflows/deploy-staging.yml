@@ -1,0 +1,53 @@
+name: Deploy OpenPalantir staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Choose deploy-staging to publish only the staging Worker"
+        required: true
+        type: choice
+        options:
+          - no
+          - deploy-staging
+        default: no
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openpalantir-staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    if: github.ref == 'refs/heads/main' && inputs.confirm == 'deploy-staging'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - name: Checkout reviewed main commit
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run Worker regression tests
+        run: npm test
+      - name: Validate staging Worker bundle
+        run: npx wrangler deploy --env staging --dry-run
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy staging only
+        run: npx wrangler deploy --env staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Record Cloudflare deployment metadata
+        run: npx wrangler deployments list --name openpalantir-staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
