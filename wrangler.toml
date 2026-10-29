@@ -23,3 +23,11 @@ head_sampling_rate = 1
 [observability.traces]
 enabled = true
 head_sampling_rate = 0.01
+
+# Isolated staging Worker. This does not alter the production Worker name.
+[env.staging]
+name = "openpalantir-staging"
+workers_dev = true
+
+[env.staging.vars]
+ENABLE_API_V2 = "false"
