@@ -1,3 +1,5 @@
+import { resolveTenantIdentity } from "./tenant-identity.js";
+
 const SECURITY_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
@@ -20,7 +22,7 @@ function cors(request, env) {
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "access-control-allow-headers": "Authorization, Content-Type, X-Request-ID",
+    "access-control-allow-headers": "Authorization, Content-Type, X-Request-ID, X-Aston-Identity",
     "access-control-max-age": "600",
     vary: "Origin",
   };
@@ -123,6 +125,17 @@ export default {
       return json({ error: "unauthorized" }, 401, { "www-authenticate": "Bearer", ...corsHeaders });
     }
 
+    // Phase 3 is opt-in. When enabled, tenant scope must come from a signed
+    // identity token issued by the configured trusted authentication service.
+    // Never accept a client-supplied X-Aston-Tenant header as authorization.
+    let tenantIdentity = null;
+    if (env.ENABLE_TENANT_AUTH === "true") {
+      tenantIdentity = await resolveTenantIdentity(request, env);
+      if (!tenantIdentity.ok) {
+        return json({ error: tenantIdentity.error }, tenantIdentity.status, corsHeaders);
+      }
+    }
+
     let body = null;
     if (!["GET", "HEAD"].includes(request.method)) {
       const bounded = await readBoundedBody(request);
@@ -139,6 +152,7 @@ export default {
     const contentType = request.headers.get("Content-Type");
     if (contentType) headers.set("Content-Type", contentType);
     headers.set("Authorization", "Bearer " + env.UPSTREAM_API_TOKEN);
+    if (tenantIdentity) headers.set("X-Aston-Tenant", tenantIdentity.tenantId);
     const requestId = request.headers.get("X-Request-ID");
     if (requestId && /^[A-Za-z0-9._:-]{1,128}$/.test(requestId)) headers.set("X-Request-ID", requestId);
     const init = { method: request.method, headers, redirect: "manual", signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) };
