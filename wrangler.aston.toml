@@ -1,0 +1,28 @@
+name = "aston-universal-os"
+main = "./workers/aston/index.js"
+compatibility_date = "2026-10-30"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[ai]
+binding = "AI"
+
+[[durable_objects.bindings]]
+name = "MALLA_DE_ENJAMBRE"
+class_name = "AstonTaskObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AstonTaskObject"]
+
+[vars]
+# Configure exact browser origins, comma-separated.
+ALLOWED_ORIGINS = ""
+# Set ASTON_AI_MODEL only to one of the allowlisted models in workers/aston/index.js.
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
