@@ -115,7 +115,7 @@ export default {
       }
       if (url.pathname === "/v1/documents" && request.method === "POST") {
         if (!env.CUBETA_DE_DOCUMENTOS) return json({ error: "r2_binding_missing" }, 503, headers);
-        const body = await readJson(request, 16384);
+        const body = await readJson(request, 5_250_000);
         const key = String(body.key || "").replace(/^\/+/, "");
         const content = String(body.content || "");
         if (!key || key.includes("..") || !content || content.length > 5_000_000)
