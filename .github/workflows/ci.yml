@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   worker:
-    name: Validate Cloudflare Worker
+    name: Validate Cloudflare Workers
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -29,8 +29,10 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Worker tests
         run: npm test
-      - name: Validate Wrangler configuration and bundle
+      - name: Validate OpenPalantir gateway bundle
         run: npx wrangler deploy --dry-run
+      - name: Validate ASTON isolated Worker bundle
+        run: npx wrangler deploy --dry-run --config wrangler.aston.toml
 
   ontology:
     name: Validate ontology API
